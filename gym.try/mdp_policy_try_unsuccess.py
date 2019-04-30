@@ -240,6 +240,97 @@ class GridEnv(gym.Env):
                 self.v[state] = vl
             if delta < 1e-6:
                 break
+                
+    def gen_randompi_sample(self, num):             # 产生样本的采样过程
+        state_sample = []
+        action_sample = []
+        reward_sample = []
+        for i in range(num):                        # 采样多个样本序列，每个样本序列包括状态序列，动作序列和回报序列
+            s_tmp = []
+            a_tmp = []
+            r_tmp = []
+            s = self.states[int(random.random() * len(self.states))]
+            t = False
+            while t is False:   # 产生一个具体的状态序列, 每个样本序列的初始状态是随机的
+                a = self.actions[int(random.random() * len(self.actions))]  # 评估随机均匀分布的策略，所以采样时动作随机产生
+                t, s1, r = self.transform(s, a)
+                s_tmp.append(s)
+                r_tmp.append(r)
+                a_tmp.append(a)
+                s = s1
+            state_sample.append(s_tmp)      # 该样本包含多个状态序列
+            reward_sample.append(r_tmp)
+            action_sample.append(a_tmp)
+        return state_sample, action_sample, reward_sample
+
+    def mc(self, gamma, state_sample, action_sample, reward_sample):        # 蒙特卡洛评估
+        vfunc = dict()
+        nfunc = dict()
+        for s in self.states:
+            vfunc[s] = 0.0
+            nfunc[s] = 0.0
+            for iter1 in range(len(state_sample)):
+                G = 0.0
+                for step in range(len(state_sample[iter1])-1, -1, -1):  # 逆向计算初始状态的累积回报, step递减
+                    G *= gamma                                          # Gt=R_(t+1)+gm*G_(t+1)
+                    G += reward_sample[iter1][step]                     # 先计算出初始状态G才可计算整个状态序列的回报
+                for step in range(len(state_sample[iter1])):                # 正向计算每个状态处的累积回报
+                    s = state_sample[iter1][step]                           # G_(t+1)=(Gt-R_(t+1))/gm
+                    vfunc[s] += G
+                    nfunc[s] += 1.0
+                    G -= reward_sample[iter1][step]
+                    G /= gamma
+
+            for s in self.states:           # 每个状态处求经验平均
+                if nfunc[s] > 0.000001:     # 每次访问蒙特卡罗方法
+                    vfunc[s] /= nfunc[s]
+            print('mc')
+            print(vfunc)
+            return(vfunc)
+
+    def MC_complete(self, num_iter1, epsilon):              # 完整版蒙特卡罗方法，不懂
+        x = []
+        y = []
+        n = dict()
+        qfunc = dict()
+        for s in self.states:
+            for a in self.actions:
+                qfunc['%d_%s' %(s, a)] = 0.0
+                n['%d_%s' %(s, a)] = 0.001
+        for iter1 in range(num_iter1):
+            x.append(iter1)
+            y.append(compute_error(qfunc))
+            s_sample = []
+            a_sample = []
+            r_sample = []
+            s = self.states[int(random.random()*len(self.states))]
+            t = False
+            count = 0
+            while t is False and count < 100:
+                a = epsilon_greedy(qfunc, s, epsilon)
+                t, s1, r = self.tranform(s, a)
+                s_sample.append(s)
+                a_sample.append(a)
+                r_sample.append(r)
+                s = s1
+                count += 1 
+                g = 0.0
+
+                for i in range(len(s_sample)-1, -1, -1):
+                    g *= self.gamma
+                    g += r_sample[r]
+                for i in range(len(s_sample)):
+                    key = '%d_%s' %(s_sample[i], a_sample[i])
+                    n[key] += 1.0
+                    qfunc[key] =(qfunc[key]*(n[key]-1)+g)/n[key]    # 取平均
+                    g -= r_sample[i]
+                    g /= self.gamma
+            return qfunc
+
+
+
+
+
 
 
 
